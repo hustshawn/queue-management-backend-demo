@@ -37,11 +37,13 @@ def resolve_ticket():
 def core(action):
     rear = ticket.get_rear()
     current = ticket.get_current()
+    if rear < current:
+        return  str(current)
     if action == 'retrieve':
         result = ticket.incr_rear()
     if action == 'resolve':
-        result = ticket.incr_current()
-    if rear < current:
-        result = -1
+        if current < rear:
+            result = ticket.incr_current()
+        else:
+            result = current
     return str(result)
-    
