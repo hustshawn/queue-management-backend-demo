@@ -6,6 +6,7 @@ import redis
 app = Flask(__name__)
 cache = redis.Redis(host='redis', port=6379)
 
+REDIS_RETRY = 5
 
 class Ticket():
     def __init__(self):
@@ -15,37 +16,47 @@ class Ticket():
         self.current = cache.get('current').decode('utf-8')
     
     def get_current(self):
-        current = cache.get('current')
-        if not current:
-            return '0'
-        self.current = current.decode('utf-8')
+        self.current = self._get_key('current')
         return self.current
 
     def get_rear(self):
-        self.rear = cache.get('rear').decode('utf-8')
+        self.rear = self._get_key('rear')
         return self.rear
 
     def incr_current(self):
-        self.current = cache.incr('current')
+        self.current = self._incr_key('current')
         return self.current
     
     def incr_rear(self):
-        self.rear = cache.incr('rear')
+        self.rear = self._incr_key('rear')
         return self.rear
 
+    def _get_key(self, key):
+        retries = REDIS_RETRY
+        while True:
+            try:
+                val = cache.get(key)
+                if not val:
+                    return '0'
+                return val.decode('utf-8')
+            except redis.exceptions.ConnectionError as exc:
+                if retries == 0:
+                    raise exc
+                retries -= 1
+                time.sleep(0.5)
+
+    def _incr_key(self, key):
+        retries = REDIS_RETRY
+        while True:
+            try:
+                return cache.incr(key)
+            except redis.exceptions.ConnectionError as exc:
+                if retries == 0:
+                    raise exc
+                retries -= 1
+                time.sleep(0.5)
 
 ticket = Ticket()
-
-def incr_key(key):
-    retries = 5
-    while True:
-        try:
-            return cache.incr(key)
-        except redis.exceptions.ConnectionError as exc:
-            if retries == 0:
-                raise exc
-            retries -= 1
-            time.sleep(0.5)
 
 @app.route('/')
 def hello_world():
