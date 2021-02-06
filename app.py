@@ -1,17 +1,26 @@
 import time
+from datetime import datetime, date, time, timedelta
 
 from flask import Flask
 import redis
 
-app = Flask(__name__)
-cache = redis.Redis(host='redis', port=6379)
-
 REDIS_RETRY = 5
+REDIS_HOST = 'redis'
+REDIS_PORT = 6379
+
+app = Flask(__name__)
+cache = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
+
+today_start = datetime.combine(date.today(), time()) 
+next_day = today_start + timedelta(1)
+
 
 class Ticket():
     def __init__(self):
         cache.set('rear', 0)
         cache.set('current', 0)
+        cache.expireat('rear', next_day)
+        cache.expireat('current', next_day)
         self.rear = cache.get('rear').decode('utf-8')
         self.current = cache.get('current').decode('utf-8')
     
