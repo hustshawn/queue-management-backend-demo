@@ -18,47 +18,36 @@ next_day = today_start + timedelta(1)
 class Ticket():
     def __init__(self):
         cache.set('rear', 0)
-        cache.set('current', 0)
         cache.expireat('rear', next_day)
+        self.rear = 0
+        cache.set('current', 1)
         cache.expireat('current', next_day)
-        self.rear = cache.get('rear').decode('utf-8')
-        self.current = cache.get('current').decode('utf-8')
+        self.current = 1
     
     def get_current(self):
-        self.current = self._get_key('current')
-        return self.current
+        self.current = self._cache_op('get', 'current')
+        return int(self.current)
 
     def get_rear(self):
-        self.rear = self._get_key('rear')
-        return self.rear
+        self.rear = self._cache_op('get', 'rear')
+        return int(self.rear)
 
     def incr_current(self):
-        self.current = self._incr_key('current')
+        self.current = self._cache_op('incr', 'current')
         return self.current
     
     def incr_rear(self):
-        self.rear = self._incr_key('rear')
+        self.rear = self._cache_op('incr', 'rear')
         return self.rear
 
-    def _get_key(self, key):
+    def _cache_op(self, action, key):
         retries = REDIS_RETRY
         while True:
             try:
-                val = cache.get(key)
-                if not val:
-                    return '0'
-                return val.decode('utf-8')
-            except redis.exceptions.ConnectionError as exc:
-                if retries == 0:
-                    raise exc
-                retries -= 1
-                time.sleep(0.5)
-
-    def _incr_key(self, key):
-        retries = REDIS_RETRY
-        while True:
-            try:
-                return cache.incr(key)
+                if action == 'incr':
+                    return cache.incr(key)
+                elif action == 'get':
+                    return cache.get(key)
             except redis.exceptions.ConnectionError as exc:
                 if retries == 0:
                     raise exc
@@ -73,23 +62,35 @@ def hello_world():
 
 @app.route('/retrieve_ticket')
 def retrieve_ticket():
-    return core('retrieve')
+    rear, current = core('retrieve')
+    msg = {
+        "your_number": rear,
+        "current": current,
+        "msg": "{} in front of you".format(str(rear-current))
+    }
+    return msg
 
 @app.route('/resolve_ticket')
 def resolve_ticket():
-    return core('resolve')
+    rear, current = core('resolve')
+    msg = {
+        "rear_number": rear,
+        "current": current,
+        "msg": "{} customer is wating outside".format(str(rear-current))
+    }
+    return msg
 
 def core(action):
     rear = ticket.get_rear()
     current = ticket.get_current()
-    if int(rear) < int(current):
-        return  str(current)
+    if rear < current and rear >= 1:
+        return  current, current
 
     if action == 'retrieve':
-        result = ticket.incr_rear()
+        rear = ticket.incr_rear()
     if action == 'resolve':
         if current < rear:
-            result = ticket.incr_current()
+            current = ticket.incr_current()
         else:
-            result = current
-    return str(result)
+            rear = current
+    return rear, current
